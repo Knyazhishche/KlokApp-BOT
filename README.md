@@ -63,6 +63,14 @@ Klok App BOT
     your_2captcha_key
   ```
 
+- **solvium_key.txt:** If you want to use the Telegram @solvium_crypto_bot to
+  solve Cloudflare challenges, create a file `solvium_key.txt` in the project
+  directory. This file should contain your Solvium API key in the following
+  format:
+  ```bash
+    your_solvium_api_key
+  ```
+
 - **proxy.txt:** You will find the file `proxy.txt` inside the project directory. Make sure `proxy.txt` contains data that matches the format expected by the script. Here are examples of file formats:
   ```bash
     ip:port # Default Protcol HTTP.
