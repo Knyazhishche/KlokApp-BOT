@@ -31,6 +31,7 @@ class KlokApp:
         self.PAGE_URL = "https://klokapp.ai"
         self.SITE_KEY = "0x4AAAAAABdQypM3HkDQTuaO"
         self.CAPTCHA_KEY = None
+        self.SOLVIUM_KEY = None
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
@@ -70,6 +71,15 @@ class KlokApp:
 
             return captcha_key
         except Exception as e:
+            return None
+
+    def load_solvium_key(self):
+        try:
+            with open("solvium_key.txt", 'r') as file:
+                solvium_key = file.read().strip()
+
+            return solvium_key
+        except Exception:
             return None
     
     async def load_proxies(self, use_proxy_choice: int):
@@ -283,8 +293,70 @@ class KlokApp:
                     return True
         except (Exception, ClientResponseError) as e:
             return None
+
+    async def solve_cf_turnstile_solvium(self, address: str, proxy=None, retries=5):
+        for attempt in range(retries):
+            connector = ProxyConnector.from_url(proxy) if proxy else None
+            try:
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    if self.SOLVIUM_KEY is None:
+                        return None
+
+                    url = (
+                        f"https://api.solvium.pro/in.php?key={self.SOLVIUM_KEY}"\
+                        f"&method=turnstile&sitekey={self.SITE_KEY}&pageurl={self.PAGE_URL}"
+                    )
+                    async with session.get(url=url) as response:
+                        response.raise_for_status()
+                        result = await response.text()
+
+                        if 'OK|' not in result:
+                            await asyncio.sleep(5)
+                            continue
+
+                        request_id = result.split('|')[1]
+
+                        self.log(
+                            f"{Fore.MAGENTA + Style.BRIGHT}   >{Style.RESET_ALL}"\
+                            f"{Fore.BLUE + Style.BRIGHT} Req Id : {Style.RESET_ALL}"\
+                            f"{Fore.WHITE + Style.BRIGHT}{request_id}{Style.RESET_ALL}"
+                        )
+
+                        for _ in range(30):
+                            res_url = (
+                                f"https://api.solvium.pro/res.php?key={self.SOLVIUM_KEY}"\
+                                f"&action=get&id={request_id}"
+                            )
+                            async with session.get(url=res_url) as res_response:
+                                res_response.raise_for_status()
+                                res_result = await res_response.text()
+
+                                if 'OK|' in res_result:
+                                    captcha_token = res_result.split('|')[1]
+                                    self.turnstile_tokens[address] = captcha_token
+                                    return True
+                                elif res_result == 'CAPCHA_NOT_READY':
+                                    self.log(
+                                        f"{Fore.MAGENTA + Style.BRIGHT}   >{Style.RESET_ALL}"\
+                                        f"{Fore.BLUE + Style.BRIGHT} Message: {Style.RESET_ALL}"\
+                                        f"{Fore.YELLOW + Style.BRIGHT}Captcha Not Ready, Retrying...{Style.RESET_ALL}"
+                                    )
+                                    await asyncio.sleep(5)
+                                    continue
+                                else:
+                                    break
+            except (Exception, ClientResponseError):
+                if attempt < retries - 1:
+                    await asyncio.sleep(5)
+                    continue
+                return None
         
     async def solve_cf_turnstile(self, address: str, proxy=None, retries=5):
+        if self.SOLVIUM_KEY:
+            solved = await self.solve_cf_turnstile_solvium(address, proxy, retries)
+            if solved:
+                return True
+
         for attempt in range(retries):
             connector = ProxyConnector.from_url(proxy) if proxy else None
             try:
@@ -644,6 +716,10 @@ class KlokApp:
             captcha_key = self.load_2captcha_key()
             if captcha_key:
                 self.CAPTCHA_KEY = captcha_key
+
+            solvium_key = self.load_solvium_key()
+            if solvium_key:
+                self.SOLVIUM_KEY = solvium_key
             
             use_proxy_choice, rotate_proxy = self.print_question()
 
