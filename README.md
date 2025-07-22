@@ -73,7 +73,7 @@ Klok App BOT
 ## Run
 
 ```bash
-python bot.py #or python3 bot.py
+node bot.js
 ```
 
 ## Buy Me a Coffee
